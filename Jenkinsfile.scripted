@@ -1,10 +1,14 @@
+
 properties([
   pipelineTriggers([pollSCM('H/2 * * * *')]),
   disableConcurrentBuilds(),
   buildDiscarder(logRotator(numToKeepStr: '10')),
   parameters([
-    booleanParam(name: 'DEPLOY', defaultValue: true,
-      description: 'Publish to the local lab preview')
+    booleanParam(
+      name: 'DEPLOY',
+      defaultValue: true,
+      description: 'Publish to the local lab preview'
+    )
   ])
 ])
 
@@ -12,23 +16,44 @@ node {
   timeout(time: 10, unit: 'MINUTES') {
     withEnv(['LAB_DEPLOY_ROOT=C:/JenkinsLab/node-cicd']) {
       try {
-        stage('Checkout') { checkout scm }
-        stage('Install') { bat 'npm.cmd ci' }
-        stage('Test') { bat 'npm.cmd test' }
-        stage('Build') { bat 'npm.cmd run build' }
+        stage('Checkout') {
+          checkout scm
+        }
+
+        stage('Install') {
+          bat 'npm.cmd ci'
+        }
+
+        stage('Test') {
+          bat 'npm.cmd test'
+        }
+
+        stage('Build') {
+          bat 'npm.cmd run build'
+        }
+
         stage('Archive') {
           archiveArtifacts artifacts: 'dist/**', fingerprint: true
         }
+
         stage('Deploy') {
-          if (params.DEPLOY != false) {
+          if (params.DEPLOY) {
+            timeout(time: 2, unit: 'MINUTES') {
+              input(
+                message: 'Approve deployment to the local lab preview?',
+                ok: 'Approve Deployment'
+              )
+            }
+
             bat 'npm.cmd run deploy -- scripted'
           } else {
-            echo 'Deployment skipped by parameter'
+            echo 'Deployment skipped because DEPLOY=false'
           }
         }
+
         echo 'CI passed. Check the Deploy stage for publication.'
       } catch (err) {
-        echo 'Failed. Inspect Console Output before retrying.'
+        echo 'Failed or aborted. Inspect Console Output.'
         throw err
       } finally {
         echo "Finished build ${env.BUILD_NUMBER}"
